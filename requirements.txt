@@ -1,0 +1,18 @@
+# Python 3.14
+# Установка: pip install -r requirements.txt
+
+# --- Данные ---
+pandas==2.3.3
+numpy==2.3.5
+
+# --- Визуализация (блок EDA) ---
+matplotlib==3.11.2
+seaborn==0.13.2
+
+# --- Машинное обучение ---
+scikit-learn==1.7.2
+scipy==1.18.0
+xgboost==3.3.0
+
+# --- Ноутбуки ---
+ipykernel==7.3.0
