@@ -6,6 +6,8 @@
     python src/build_features.py --check-only # только проверки готовой витрины
     python src/build_features.py --checks     # выполнить sql/02_checks.sql
                                               # (проверочные запросы по сырому слою)
+    python src/build_features.py --analytics  # выполнить sql/04_analytics.sql
+                                              # (аналитические разрезы для EDA)
 
 Скрипт идемпотентен: sql/03_features.sql начинается с DROP TABLE.
 Вся логика витрины живёт в SQL — здесь только запуск, контроль и вывод.
@@ -24,6 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "db" / "olist.db"
 FEATURES_SQL = PROJECT_ROOT / "sql" / "03_features.sql"
 CHECKS_SQL = PROJECT_ROOT / "sql" / "02_checks.sql"
+ANALYTICS_SQL = PROJECT_ROOT / "sql" / "04_analytics.sql"
 
 # Факты из раздела 2 плана. Витрина должна воспроизводить их точно,
 # иначе где-то потерялись или задвоились заказы.
@@ -58,8 +61,9 @@ REQUIRED_NOT_NULL = (
     "customer_state",
 )
 
-# Маркер запроса в sql/02_checks.sql: "-- [Q1] Название"
-QUERY_MARKER = re.compile(r"^--\s*\[(Q\d+)\]\s*(.*)$", re.MULTILINE)
+# Маркер именованного запроса: "-- [Q1] Название" в sql/02_checks.sql,
+# "-- [A1] Название" в sql/04_analytics.sql
+QUERY_MARKER = re.compile(r"^--\s*\[([QA]\d+)\]\s*(.*)$", re.MULTILINE)
 
 
 def log(message: str) -> None:
@@ -127,12 +131,12 @@ def print_table(cursor: sqlite3.Cursor) -> None:
             log("    " + "  ".join("-" * width for width in widths))
 
 
-def run_raw_checks(conn: sqlite3.Connection) -> None:
-    """Выполняет sql/02_checks.sql и печатает результаты."""
-    if not CHECKS_SQL.exists():
-        raise FileNotFoundError(f"нет файла {CHECKS_SQL}")
-    blocks = split_named_queries(CHECKS_SQL.read_text(encoding="utf-8"))
-    log(f"Проверочные запросы по сырому слою ({CHECKS_SQL.name}): {len(blocks)} шт.\n")
+def run_named_queries(conn: sqlite3.Connection, path: Path, title: str) -> None:
+    """Выполняет файл с именованными запросами и печатает результаты."""
+    if not path.exists():
+        raise FileNotFoundError(f"нет файла {path}")
+    blocks = split_named_queries(path.read_text(encoding="utf-8"))
+    log(f"{title} ({path.name}): {len(blocks)} шт.\n")
     for code, title, body in blocks:
         log(f"  [{code}] {title}")
         print_table(conn.execute(body))
@@ -293,13 +297,22 @@ def main() -> int:
         action="store_true",
         help="выполнить проверочные запросы sql/02_checks.sql и выйти",
     )
+    parser.add_argument(
+        "--analytics",
+        action="store_true",
+        help="выполнить аналитические запросы sql/04_analytics.sql и выйти",
+    )
     args = parser.parse_args()
 
     started = time.perf_counter()
     conn = connect(args.db)
     try:
         if args.checks:
-            run_raw_checks(conn)
+            run_named_queries(conn, CHECKS_SQL, "Проверочные запросы по сырому слою")
+            return 0
+
+        if args.analytics:
+            run_named_queries(conn, ANALYTICS_SQL, "Аналитические запросы для EDA")
             return 0
 
         if not args.check_only:
